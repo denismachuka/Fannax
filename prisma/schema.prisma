@@ -1,0 +1,325 @@
+// Prisma schema for Fannax - Football Social Network
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// User model - core account information
+model User {
+  id              String    @id @default(cuid())
+  username        String    @unique
+  email           String?   @unique
+  phone           String?   @unique
+  password        String
+  name            String
+  bio             String?
+  profilePhoto    String?
+  isVerified      Boolean   @default(false)
+  isTeamAccount   Boolean   @default(false)
+  teamId          String?
+  totalPoints     Int       @default(0)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  team            Team?     @relation(fields: [teamId], references: [id])
+  posts           Post[]
+  comments        Comment[]
+  likes           Like[]
+  shares          Share[]
+  predictions     Prediction[]
+  pollVotes       PollVote[]
+  followers       Follow[]  @relation("Following")
+  following       Follow[]  @relation("Follower")
+  notifications   Notification[] @relation("NotificationRecipient")
+  sentNotifications Notification[] @relation("NotificationSender")
+
+  @@index([username])
+  @@index([email])
+  @@index([totalPoints])
+}
+
+// Follow relationship between users
+model Follow {
+  id          String   @id @default(cuid())
+  followerId  String
+  followingId String
+  createdAt   DateTime @default(now())
+
+  follower    User     @relation("Follower", fields: [followerId], references: [id], onDelete: Cascade)
+  following   User     @relation("Following", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@unique([followerId, followingId])
+  @@index([followerId])
+  @@index([followingId])
+}
+
+// Post model - supports text, photo, poll, and prediction types
+model Post {
+  id          String     @id @default(cuid())
+  type        PostType
+  content     String?
+  mediaUrls   String[]   @default([])
+  authorId    String
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  // Relations
+  author      User       @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  comments    Comment[]
+  likes       Like[]
+  shares      Share[]
+  poll        Poll?
+  prediction  Prediction?
+  mentions    PostMention[]
+
+  @@index([authorId])
+  @@index([createdAt])
+  @@index([type])
+}
+
+enum PostType {
+  TEXT
+  PHOTO
+  POLL
+  PREDICTION
+}
+
+// Poll model - attached to poll-type posts
+model Poll {
+  id        String       @id @default(cuid())
+  postId    String       @unique
+  question  String
+  endsAt    DateTime?
+  createdAt DateTime     @default(now())
+
+  post      Post         @relation(fields: [postId], references: [id], onDelete: Cascade)
+  options   PollOption[]
+}
+
+// Poll options
+model PollOption {
+  id        String     @id @default(cuid())
+  pollId    String
+  text      String
+  createdAt DateTime   @default(now())
+
+  poll      Poll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  votes     PollVote[]
+
+  @@index([pollId])
+}
+
+// Poll votes
+model PollVote {
+  id        String     @id @default(cuid())
+  userId    String
+  optionId  String
+  createdAt DateTime   @default(now())
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  option    PollOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, optionId])
+  @@index([optionId])
+}
+
+// Comment model
+model Comment {
+  id        String   @id @default(cuid())
+  content   String
+  postId    String
+  authorId  String
+  parentId  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  post      Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author    User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  parent    Comment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies   Comment[] @relation("CommentReplies")
+
+  @@index([postId])
+  @@index([authorId])
+}
+
+// Like model
+model Like {
+  id        String   @id @default(cuid())
+  postId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@index([postId])
+  @@index([userId])
+}
+
+// Share model
+model Share {
+  id        String   @id @default(cuid())
+  postId    String
+  userId    String
+  caption   String?
+  createdAt DateTime @default(now())
+
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([postId])
+  @@index([userId])
+}
+
+// Football Team model - auto-populated from SportMonks
+model Team {
+  id                String   @id @default(cuid())
+  sportmonksId      Int      @unique
+  name              String
+  shortCode         String?
+  reservedUsername  String   @unique
+  logoUrl           String?
+  countryId         Int?
+  leagueId          Int?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  users             User[]
+  homeMatches       Match[]  @relation("HomeTeam")
+  awayMatches       Match[]  @relation("AwayTeam")
+
+  @@index([name])
+  @@index([reservedUsername])
+}
+
+// Football Player model - auto-populated from SportMonks
+model Player {
+  id            String   @id @default(cuid())
+  sportmonksId  Int      @unique
+  name          String
+  displayName   String
+  nationality   String?
+  position      String?
+  photoUrl      String?
+  isRetired     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  mentions      PostMention[]
+
+  @@index([name])
+  @@index([displayName])
+}
+
+// Post mentions - for tagging players
+model PostMention {
+  id        String   @id @default(cuid())
+  postId    String
+  playerId  String
+  createdAt DateTime @default(now())
+
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  player    Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, playerId])
+  @@index([playerId])
+}
+
+// Football Match model - synced from SportMonks
+model Match {
+  id              String      @id @default(cuid())
+  sportmonksId    Int         @unique
+  homeTeamId      String
+  awayTeamId      String
+  homeScore       Int?
+  awayScore       Int?
+  leagueName      String?
+  leagueId        Int?
+  venue           String?
+  scheduledAt     DateTime
+  status          MatchStatus @default(SCHEDULED)
+  resultUpdatedAt DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  homeTeam        Team        @relation("HomeTeam", fields: [homeTeamId], references: [id])
+  awayTeam        Team        @relation("AwayTeam", fields: [awayTeamId], references: [id])
+  predictions     Prediction[]
+
+  @@index([scheduledAt])
+  @@index([status])
+  @@index([homeTeamId])
+  @@index([awayTeamId])
+}
+
+enum MatchStatus {
+  SCHEDULED
+  LIVE
+  FINISHED
+  POSTPONED
+  CANCELLED
+}
+
+// Prediction model - user predictions for matches
+model Prediction {
+  id                String           @id @default(cuid())
+  postId            String           @unique
+  matchId           String
+  userId            String
+  predictedHomeScore Int
+  predictedAwayScore Int
+  caption           String?
+  pointsAwarded     Int?
+  resultStatus      PredictionResult?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  post              Post             @relation(fields: [postId], references: [id], onDelete: Cascade)
+  match             Match            @relation(fields: [matchId], references: [id])
+  user              User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([matchId])
+  @@index([userId])
+  @@index([resultStatus])
+}
+
+enum PredictionResult {
+  PENDING
+  EXACT_MATCH    // +3 points - correct team and exact score
+  CORRECT_WINNER // +2 points - correct winner but wrong score
+  INCORRECT      // -1 point - wrong prediction
+}
+
+// Notification model
+model Notification {
+  id          String           @id @default(cuid())
+  type        NotificationType
+  recipientId String
+  senderId    String?
+  postId      String?
+  message     String?
+  isRead      Boolean          @default(false)
+  createdAt   DateTime         @default(now())
+
+  recipient   User             @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  sender      User?            @relation("NotificationSender", fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([recipientId])
+  @@index([isRead])
+  @@index([createdAt])
+}
+
+enum NotificationType {
+  LIKE
+  COMMENT
+  SHARE
+  FOLLOW
+  PREDICTION_RESULT
+  MENTION
+}
