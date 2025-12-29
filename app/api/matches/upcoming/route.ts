@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
     })
 
     // Transform for simpler response
-    const transformedMatches = matches.map(match => ({
+    const transformedMatches = matches.map((match: typeof matches[number]) => ({
       id: match.id,
       homeTeam: match.homeTeam.name,
       awayTeam: match.awayTeam.name,

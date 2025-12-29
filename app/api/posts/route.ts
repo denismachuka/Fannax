@@ -96,7 +96,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Transform posts to include isLiked flag
-    const transformedPosts = posts.map(post => ({
+    const transformedPosts = posts.map((post: typeof posts[number]) => ({
       ...post,
       isLiked: post.likes && post.likes.length > 0,
       likes: undefined
